@@ -1,23 +1,26 @@
 package id.alianhakim.imageupload.data.repository
 
-import id.alianhakim.imageupload.api.FileApi
+import id.alianhakim.imageupload.api.ImageApi
+import id.alianhakim.imageupload.data.ImageUploadRequest
 import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.asRequestBody
 import retrofit2.HttpException
 import java.io.File
 import java.io.IOException
 
 class ImageRepositoryRepositoryImpl constructor(
-    private val api: FileApi
+    private val api: ImageApi
 ) : ImageRepository {
     override suspend fun uploadImage(file: File): Boolean {
         return try {
             api.uploadImage(
                 file = MultipartBody.Part
                     .createFormData(
-                        name = file.nameWithoutExtension,
+                        name = "file",
                         filename = file.name,
-                        body = file.asRequestBody() 
+                        body = ImageUploadRequest(
+                            file = file,
+                            contentType = "image"
+                        )
                     )
             )
             true

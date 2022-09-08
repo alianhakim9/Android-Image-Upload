@@ -1,29 +1,29 @@
 package id.alianhakim.imageupload.ui
 
-import android.Manifest
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
+import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import coil.load
+import androidx.core.view.isVisible
 import dagger.hilt.android.AndroidEntryPoint
 import id.alianhakim.imageupload.databinding.ActivityMainBinding
+import id.alianhakim.imageupload.utils.getFileName
+import id.alianhakim.imageupload.utils.snackbar
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
-@Suppress("NULLABILITY_MISMATCH_BASED_ON_JAVA_ANNOTATIONS")
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
     private val viewModel by viewModels<ImageViewModel>()
     private lateinit var binding: ActivityMainBinding
+    private var selectedImage: Uri? = null
 
     companion object {
         private const val REQUEST_CODE = 200
-        private const val PERMISSION_CODE = 1001
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,58 +33,56 @@ class MainActivity : AppCompatActivity() {
 
         binding.apply {
             uploadBtn.setOnClickListener {
-                //check runtime permission
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
-                        PackageManager.PERMISSION_DENIED
-                    ) {
-                        //permission denied
-                        val permissions = arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE);
-                        //show popup to request runtime permission
-                        requestPermissions(permissions, PERMISSION_CODE);
-                    } else {
-                        //permission already granted
-                        pickImageFromGallery();
-                    }
-                } else {
-                    //system OS is < Marshmallow
-                    pickImageFromGallery();
-                }
+                openImageChooser()
             }
+
+            saveImage.setOnClickListener {
+                uploadImage()
+            }
+        }
+
+        viewModel.loading.observe(this) {
+            binding.progressBar.isVisible = it
+        }
+
+        viewModel.success.observe(this) {
+            binding.root.snackbar(message = it)
         }
     }
 
-    private fun pickImageFromGallery() {
-        val intent = Intent(Intent.ACTION_PICK)
-        intent.type = "image/**"
-        startActivityForResult(intent, REQUEST_CODE)
+    private fun uploadImage() {
+        if (selectedImage == null) {
+            binding.root.snackbar(message = "select an image first")
+            return
+        }
+        val parcelFileDescriptor =
+            contentResolver.openFileDescriptor(selectedImage!!, "r", null) ?: return
+
+        val file = File(cacheDir, contentResolver.getFileName(selectedImage!!))
+        // copy file from external storage to android local storage
+        val inputStream = FileInputStream(parcelFileDescriptor.fileDescriptor)
+        val outputStream = FileOutputStream(file)
+        inputStream.copyTo(outputStream)
+        viewModel.uploadImage(file)
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        when (requestCode) {
-            PERMISSION_CODE -> {
-                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    pickImageFromGallery()
-                } else {
-                    Toast.makeText(this, "Permission Denied", Toast.LENGTH_SHORT).show()
-                }
-            }
+    private fun openImageChooser() {
+        Intent(Intent.ACTION_PICK).apply {
+            type = "image/**"
+            val mimeType = arrayOf("image/jpeg", "image/png")
+            putExtra(Intent.EXTRA_MIME_TYPES, mimeType)
+            startActivityForResult(this, REQUEST_CODE)
         }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (resultCode == Activity.RESULT_OK && requestCode == REQUEST_CODE) {
-            binding.imageView.load(data = data?.data) {
-                crossfade(true)
-            }
-            binding.saveImage.setOnClickListener {
-                viewModel.uploadImage(File(data?.data?.encodedPath))
+        if (resultCode == Activity.RESULT_OK) {
+            when (requestCode) {
+                REQUEST_CODE -> {
+                    selectedImage = data?.data
+                    binding.imageView.setImageURI(selectedImage)
+                }
             }
         }
     }

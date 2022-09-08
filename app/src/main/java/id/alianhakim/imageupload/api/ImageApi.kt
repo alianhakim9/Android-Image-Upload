@@ -5,12 +5,11 @@ import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
 
-interface FileApi {
+interface ImageApi {
 
-    @POST("/upload")
+    @POST("upload")
     @Multipart
     suspend fun uploadImage(
         @Part file: MultipartBody.Part,
-//        @Part("upload_preset") preset: RequestBody
     ): ImageUploadResponse
 }
